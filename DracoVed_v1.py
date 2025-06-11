@@ -422,12 +422,11 @@ def print_d1_birth_chart():
         console.print("[bold red]Error: Unable to compute Ayanamsa. Chart cannot be generated.[/bold red]")
         return
         
-    # Ascendant calculation
-    from skyfield.api import wgs84
-    observer = wgs84.latlon(lat, lon)
-    asc_icrf = observer.at(t_sky).from_altaz(alt_degrees=0, az_degrees=90)
-    asc_ecl_lat, asc_ecl_lon, _ = asc_icrf.ecliptic_latlon()
-    asc_long_tropical = asc_ecl_lon.degrees
+    # Ascendant calculation (Swiss Ephemeris, true Vedic method)
+    jd_ut = get_julian_day_from_skyfield_time(t_sky)
+    # swe_houses returns (cusps, ascmc), ascmc[0] is Ascendant in tropical
+    cusps, ascmc = swe.houses(jd_ut, lat, lon, b'A')  # Placidus, but ascmc[0] is always Ascendant
+    asc_long_tropical = ascmc[0]
     asc_sid_long = get_sidereal_longitude(asc_long_tropical, ayanamsa)
     asc_sign_index = get_zodiac_sign_index(asc_sid_long)
     asc_sign = ZODIAC_SIGNS_SIDEREAL[asc_sign_index] if asc_sign_index is not None else "N/A"
