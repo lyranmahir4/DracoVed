@@ -24,7 +24,7 @@ PLANET_SKYFIELD_NAMES = {
     "Moon": 'moon',
     "Mercury": 'mercury',
     "Venus": 'venus',
-    "Mars": 'mars',
+    "Mars": 'mars barycenter',  # Changed from 'mars' to 'mars barycenter'
     "Jupiter": 'jupiter barycenter',
     "Saturn": 'saturn barycenter'
 }
@@ -344,36 +344,102 @@ def get_location_coordinates():
 def print_d1_birth_chart():
     console.print("[bold yellow]Enter birth details for D1 chart:[/bold yellow]")
     name = input("Name (optional): ").strip()
-    year = int(input("Year (e.g. 1990): ").strip())
-    month = int(input("Month (1-12): ").strip())
-    day = int(input("Day (1-31): ").strip())
-    hour = int(input("Hour (0-23): ").strip())
-    minute = int(input("Minute (0-59): ").strip())
-    second = int(input("Second (0-59, default 0): ") or "0")
+    # Input gathering with basic validation loop
+    while True:
+        try:
+            year = int(input("Year (e.g. 1990): ").strip())
+            month = int(input("Month (1-12): ").strip())
+            day = int(input("Day (1-31): ").strip())
+            hour = int(input("Hour (0-23, local time): ").strip())
+            minute = int(input("Minute (0-59): ").strip())
+            second_str = input("Second (0-59, default 0): ") or "0"
+            second = int(second_str)
+            # This will raise ValueError on invalid date/time
+            datetime(year, month, day, hour, minute, second)
+            break
+        except ValueError as e:
+            console.print(f"[red]Invalid date/time input: {e}. Please try again.[/red]")
+
     lat, lon = get_location_coordinates()
-    dt_utc = datetime(year, month, day, hour, minute, int(second), tzinfo=timezone.utc)
-    t_sky = ts.utc(dt_utc)
+
+    # --- Improved Timezone Handling with User Confirmation ---
+    local_tz = None
+    try:
+        from timezonefinder import TimezoneFinder
+        import pytz
+        tf = TimezoneFinder()
+        tz_str = tf.timezone_at(lng=lon, lat=lat)
+        if tz_str:
+            console.print(f"[green]Detected Timezone:[/green] [bold cyan]{tz_str}[/bold cyan]")
+            confirm = input("Is this correct? (Y/n): ").strip().lower()
+            if confirm == '' or confirm == 'y':
+                local_tz = pytz.timezone(tz_str)
+            else:
+                console.print("Proceeding with manual timezone entry.")
+        else:
+            raise ValueError("Could not automatically determine timezone.")
+            
+    except (ImportError, ModuleNotFoundError):
+        console.print("[bold red]Libraries `pytz` and `timezonefinder` not found.[/bold red]")
+        console.print("Please install them for automatic timezone detection: [cyan]pip install pytz timezonefinder[/cyan]")
+    except Exception as e:
+        console.print(f"[yellow]Warning: {e}.[/yellow]")
+
+    # Fallback to manual entry if automatic detection fails or is rejected by user
+    if not local_tz:
+        while True:
+            try:
+                console.print("\n[bold]Please enter the timezone manually.[/bold]")
+                console.print("Examples: [cyan]Asia/Dhaka[/cyan], [cyan]America/New_York[/cyan], or a UTC offset like [cyan]+5.5[/cyan] or [cyan]-7[/cyan].")
+                tz_input = input("Enter timezone or UTC offset: ").strip()
+                # Check if it's a numeric offset
+                try:
+                    offset_hours = float(tz_input)
+                    offset_minutes = int(offset_hours * 60)
+                    local_tz = timezone(timedelta(minutes=offset_minutes))
+                    break
+                except ValueError:
+                    # If not a number, treat as a timezone name (e.g., 'Asia/Kolkata')
+                    import pytz
+                    local_tz = pytz.timezone(tz_input)
+                    break
+            except Exception as e:
+                console.print(f"[red]Invalid timezone or offset: {e}. Please try again.[/red]")
+
+    # Create a timezone-aware datetime object from local time input
+    local_dt = datetime(year, month, day, hour, minute, second)
+    aware_local_dt = local_tz.localize(local_dt, is_dst=None) # is_dst=None handles ambiguous times
+    
+    # Convert the aware local time to UTC
+    dt_utc = aware_local_dt.astimezone(timezone.utc)
+    console.print(f"Birth Time (Local): {aware_local_dt.strftime('%Y-%m-%d %H:%M:%S %Z%z')}")
+    console.print(f"Birth Time (UTC):   {dt_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+
+    t_sky = ts.from_datetime(dt_utc) # Use from_datetime for timezone-aware objects
     jd_ut = get_julian_day_from_skyfield_time(t_sky)
     ayanamsa = get_ayanamsa_value(jd_ut)
     if ayanamsa is None:
         console.print("[bold red]Error: Unable to compute Ayanamsa. Chart cannot be generated.[/bold red]")
         return
-    # Ascendant calculation (robust, Skyfield way)
+        
+    # Ascendant calculation
     from skyfield.api import wgs84
     observer = wgs84.latlon(lat, lon)
     asc_icrf = observer.at(t_sky).from_altaz(alt_degrees=0, az_degrees=90)
     asc_ecl_lat, asc_ecl_lon, _ = asc_icrf.ecliptic_latlon()
-    asc_long = asc_ecl_lon.degrees
-    asc_sid_long = get_sidereal_longitude(asc_long, ayanamsa)
+    asc_long_tropical = asc_ecl_lon.degrees
+    asc_sid_long = get_sidereal_longitude(asc_long_tropical, ayanamsa)
     asc_sign_index = get_zodiac_sign_index(asc_sid_long)
     asc_sign = ZODIAC_SIGNS_SIDEREAL[asc_sign_index] if asc_sign_index is not None else "N/A"
     asc_deg_in_sign = format_degree_in_sign(asc_sid_long)
     asc_nak, asc_pada = get_nakshatra_and_pada(asc_sid_long)
+
     # Planets
     planet_rows = []
     planet_positions = {}
     for planet in ALL_PLANETS:
         try:
+            tropical_lon = None
             if planet in PLANET_SKYFIELD_NAMES:
                 tropical_lon = get_tropical_ecliptic_longitude_skyfield(t_sky, PLANET_SKYFIELD_NAMES[planet])
             elif planet == "Rahu":
@@ -381,15 +447,13 @@ def print_d1_birth_chart():
             elif planet == "Ketu":
                 rahu_lon = get_rahu_tropical_longitude_swisseph(jd_ut)
                 tropical_lon = (rahu_lon + 180.0) % 360.0 if rahu_lon is not None else None
-            else:
-                tropical_lon = None
+
             if tropical_lon is None:
+                # This is where the warning for Mars would appear if the file is corrupt
                 console.print(f"[red]Warning: Could not calculate position for {planet}[/red]")
                 continue
+
             sidereal_lon = get_sidereal_longitude(tropical_lon, ayanamsa)
-            if sidereal_lon is None:
-                console.print(f"[red]Warning: Could not calculate sidereal position for {planet}[/red]")
-                continue
             sign_index = get_zodiac_sign_index(sidereal_lon)
             sign_name = ZODIAC_SIGNS_SIDEREAL[sign_index] if sign_index is not None else "N/A"
             deg_in_sign = format_degree_in_sign(sidereal_lon)
@@ -403,35 +467,43 @@ def print_d1_birth_chart():
             ])
         except Exception as e:
             console.print(f"[red]Error calculating {planet}'s position: {str(e)}[/red]")
-    # House calculation: 30° per house from ascendant (using exact degree, not sign)
-    def get_house_number(planet_longitude, asc_longitude):
-        rel_angle = (planet_longitude - asc_longitude + 360) % 360
-        house = 1 + int(rel_angle // 30)
+
+    # House calculation (Whole Sign System)
+    def get_house_number(planet_sign_index, asc_sign_index):
+        if planet_sign_index is None or asc_sign_index is None:
+            return None
+        house = ((planet_sign_index - asc_sign_index + 12) % 12) + 1
         return house
-    house_planets = {i+1: [] for i in range(12)}
+
+    house_planets = {i + 1: [] for i in range(12)}
+    house_planets[1].append("Asc") 
+
     for planet, sid_long in planet_positions.items():
-        if sid_long is None:
-            continue
-        house = get_house_number(sid_long, asc_sid_long)
-        house_planets[house].append(planet)
+        planet_sign_index = get_zodiac_sign_index(sid_long)
+        house = get_house_number(planet_sign_index, asc_sign_index)
+        if house is not None:
+            house_planets[house].append(planet)
+
     # Print chart
     title = f"[bold magenta]D1 Birth Chart for {name if name else 'Person'}[/bold magenta]"
     chart_table = Table(title=title, show_lines=True)
-    chart_table.add_column("Planet", style="bold yellow")
-    chart_table.add_column("Deg in Sign", style="cyan")
-    chart_table.add_column("Sign", style="bold cyan")
-    chart_table.add_column("Nakshatra-Pada")
-    for row in planet_rows:
-        chart_table.add_row(*row)
+    chart_table.add_column("Planet", style="bold yellow"); chart_table.add_column("Deg in Sign", style="cyan"); chart_table.add_column("Sign", style="bold cyan"); chart_table.add_column("Nakshatra-Pada")
+    for row in planet_rows: chart_table.add_row(*row)
+    
     console.print(Panel.fit(f"[bold green]Ascendant: {asc_sign} {asc_deg_in_sign}° ({asc_nak}-{asc_pada})[/bold green]", style="green"))
+    console.print(Panel.fit(f"[bold blue]Ayanamsha (True Chitrapaksha): {ayanamsa:.4f}°[/bold blue]", style="blue"))
     console.print(chart_table)
+
     # Print house-wise planets
-    house_table = Table(title="[bold magenta]Planets in Houses (from Ascendant)[/bold magenta]", show_lines=True)
-    house_table.add_column("House", style="bold yellow")
-    house_table.add_column("Planets", style="bold cyan")
+    house_table = Table(title="[bold magenta]Planets in Houses (Whole Sign System)[/bold magenta]", show_lines=True)
+    house_table.add_column("House", style="bold yellow"); house_table.add_column("Sign", style="bold cyan"); house_table.add_column("Planets")
+
     for i in range(1, 13):
-        plist = ", ".join(house_planets[i]) if house_planets[i] else "-"
-        house_table.add_row(str(i), plist)
+        house_sign_index = (asc_sign_index + i - 1) % 12
+        house_sign_name = ZODIAC_SIGNS_SIDEREAL[house_sign_index]
+        plist = ", ".join(sorted(house_planets[i])) if house_planets[i] else "-"
+        house_table.add_row(str(i), house_sign_name, plist)
+
     console.print(house_table)
 
 if __name__ == "__main__":
