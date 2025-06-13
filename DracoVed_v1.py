@@ -24,8 +24,9 @@ if __name__ == "__main__":
         console.print("  1. Find all dates with N-planet conjunctions")
         console.print("  2. Find all dates when two specific planets conjunct")
         console.print("  3. Show D1 birth chart details")
+        console.print("  4. Show planetary transits")
         console.print("  0. Exit")
-        choice = input("Enter your choice (0/1/2/3): ").strip()
+        choice = input("Enter your choice (0/1/2/3/4): ").strip()
         if choice == "0":
             console.print("[bold green]Goodbye![/bold green]")
             break
@@ -81,5 +82,8 @@ if __name__ == "__main__":
             find_pair_conjunctions(start_dt_obj, end_dt_obj, planet1, planet2, eph, earth, ts)
         elif choice == "3":
             print_d1_birth_chart(eph, earth, ts)
+        elif choice == "4":
+            from features import show_transits
+            show_transits(eph, earth, ts)
         else:
-            console.print("[red]Invalid choice. Please enter 0, 1, 2, or 3.[/red]")
+            console.print("[red]Invalid choice. Please enter 0, 1, 2, 3, or 4.[/red]")

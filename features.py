@@ -344,3 +344,95 @@ def print_d1_birth_chart(eph, earth, ts):
         plist = ", ".join(sorted(house_planets[i])) if house_planets[i] else "-"
         house_table.add_row(str(i), house_sign_name, plist)
     console.print(house_table)
+
+
+def show_transits(eph, earth, ts):
+    console.print("[bold yellow]Show planetary transits[/bold yellow]")
+    while True:
+        try:
+            year = int(input("Enter year (e.g. 2025): ").strip())
+            if 1800 <= year <= 2200:
+                break
+            else:
+                console.print("[red]Please enter a valid year between 1800 and 2200.[/red]")
+        except ValueError:
+            console.print("[red]Invalid input. Please enter a valid year.[/red]")
+    mode = "basic"
+    console.print("Select mode: [cyan]1. Basic (whole year)[/cyan], [cyan]2. Advanced (select months)[/cyan]")
+    mode_choice = input("Enter 1 for basic, 2 for advanced: ").strip()
+    if mode_choice == "2":
+        mode = "advanced"
+    month_start, month_end = 1, 12
+    if mode == "advanced":
+        while True:
+            try:
+                month_start = int(input("Enter start month (1-12): ").strip())
+                month_end = int(input("Enter end month (1-12): ").strip())
+                if 1 <= month_start <= 12 and 1 <= month_end <= 12 and month_start <= month_end:
+                    break
+                else:
+                    console.print("[red]Invalid month range. Try again.[/red]")
+            except ValueError:
+                console.print("[red]Invalid input. Please enter valid months.[/red]")
+    from config import PLANET_SKYFIELD_NAMES, ZODIAC_SIGNS_SIDEREAL, ALL_PLANETS
+    from astro_utils import get_skyfield_time, get_julian_day_from_skyfield_time, get_ayanamsa_value, get_tropical_ecliptic_longitude_skyfield, get_rahu_tropical_longitude_swisseph, get_sidereal_longitude, get_zodiac_sign_index
+    import swisseph as swe
+    events_by_month = {m: [] for m in range(month_start, month_end+1)}
+    total_days = sum(31 for m in range(month_start, month_end+1))
+    with Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Calculating transits", total=total_days)
+        for planet in ALL_PLANETS:
+            prev_sign = None
+            for month in range(month_start, month_end+1):
+                for day in range(1, 32):
+                    try:
+                        t_sky = get_skyfield_time(year, month, day)
+                    except Exception:
+                        continue
+                    jd_ut = get_julian_day_from_skyfield_time(t_sky)
+                    ayanamsa = get_ayanamsa_value(jd_ut)
+                    if planet in PLANET_SKYFIELD_NAMES:
+                        tropical_lon = get_tropical_ecliptic_longitude_skyfield(t_sky, PLANET_SKYFIELD_NAMES[planet], eph, earth)
+                    elif planet == "Rahu":
+                        tropical_lon = get_rahu_tropical_longitude_swisseph(jd_ut)
+                    elif planet == "Ketu":
+                        rahu_lon = get_rahu_tropical_longitude_swisseph(jd_ut)
+                        tropical_lon = (rahu_lon + 180.0) % 360.0 if rahu_lon is not None else None
+                    else:
+                        tropical_lon = None
+                    if tropical_lon is None or ayanamsa is None:
+                        progress.update(task, advance=1)
+                        continue
+                    sidereal_lon = get_sidereal_longitude(tropical_lon, ayanamsa)
+                    sign_index = get_zodiac_sign_index(sidereal_lon)
+                    if sign_index is None:
+                        progress.update(task, advance=1)
+                        continue
+                    if prev_sign is None:
+                        prev_sign = sign_index
+                    elif sign_index != prev_sign:
+                        events_by_month[month].append([f"{year}-{month:02d}-{day:02d}", planet, ZODIAC_SIGNS_SIDEREAL[sign_index]])
+                        prev_sign = sign_index
+                    progress.update(task, advance=1)
+    any_events = False
+    for month in range(month_start, month_end+1):
+        month_events = events_by_month[month]
+        if month_events:
+            any_events = True
+            month_name = datetime(year, month, 1).strftime("%B")
+            table = Table(title=f"[bold magenta]{month_name} {year}[/bold magenta]", show_lines=True)
+            table.add_column("Date", style="cyan")
+            table.add_column("Planet", style="bold yellow")
+            table.add_column("Sign Entered", style="bold cyan")
+            for row in month_events:
+                table.add_row(*row)
+            console.print(table)
+    if not any_events:
+        console.print("[yellow]No transits found for the selected period.")
