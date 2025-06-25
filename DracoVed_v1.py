@@ -25,8 +25,9 @@ if __name__ == "__main__":
         console.print("  2. Find all dates when two specific planets conjunct")
         console.print("  3. Show D1 birth chart details")
         console.print("  4. Show planetary transits")
+        console.print("  5. Find conjunctions with Sun+Moon + N planets")
         console.print("  0. Exit")
-        choice = input("Enter your choice (0/1/2/3/4): ").strip()
+        choice = input("Enter your choice (0/1/2/3/4/5): ").strip()
         if choice == "0":
             console.print("[bold green]Goodbye![/bold green]")
             break
@@ -85,5 +86,29 @@ if __name__ == "__main__":
         elif choice == "4":
             from features import show_transits
             show_transits(eph, earth, ts)
+        elif choice == "5":
+            while True:
+                try:
+                    n_planets = int(input(f"Enter total number of planets for conjunction (min 3): ").strip())
+                    if n_planets >= 3:
+                        break
+                    else:
+                        console.print("[red]Please enter a number 3 or greater.[/red]")
+                except ValueError:
+                    console.print("[red]Invalid input. Please enter a number.[/red]")
+            while True:
+                try:
+                    start_year = int(input(f"Enter start year (e.g. 2017): ").strip())
+                    end_year = int(input(f"Enter end year (e.g. 2050): ").strip())
+                    if start_year <= end_year:
+                        break
+                    else:
+                        console.print("[red]Start year must be less than or equal to end year.[/red]")
+                except ValueError:
+                    console.print("[red]Invalid input. Please enter a valid year.[/red]")
+            start_dt_obj = datetime(start_year, 1, 1)
+            end_dt_obj = datetime(end_year, 12, 31)
+            from features import find_conjunctions_with_sun_moon
+            find_conjunctions_with_sun_moon(start_dt_obj, end_dt_obj, n_planets, eph, earth, ts)
         else:
-            console.print("[red]Invalid choice. Please enter 0, 1, 2, 3, or 4.[/red]")
+            console.print("[red]Invalid choice. Please enter 0, 1, 2, 3, 4, or 5.[/red]")
