@@ -1,40 +1,41 @@
 # DracoVed
 
-DracoVed is a Vedic astrology research tool for finding planetary conjunctions and generating D1 (Lagna) birth charts using modern astronomical ephemerides.
+DracoVed is a command line toolkit for Vedic astrology research. It uses modern ephemerides from Skyfield and the Swiss Ephemeris to compute accurate sidereal positions and offers several interactive features via a rich terminal interface.
 
 ## Features
-- **N-Planet Conjunction Search:** Find all dates when N or more planets (including Rahu/Ketu) are in the same sidereal sign.
-- **Pairwise Conjunction Search:** Find all dates when any two specific planets are conjunct in the same sign.
-- **D1 Birth Chart Generator:** Enter birth details and location to generate a detailed Vedic D1 chart, including ascendant, planetary positions, and house distribution.
-- **Timezone and Geolocation Support:** Automatic timezone detection for birth location (with manual fallback).
-- **Rich Terminal Output:** Beautiful, color-coded tables and panels for easy reading.
+- **Multi-Planet Conjunction Search** – scan any time range for dates when a specified number of planets share the same sidereal sign. Rahu and Ketu are supported.
+- **Pairwise Conjunctions** – list all dates when two chosen bodies meet in a sign, along with their degrees and nakshatras.
+- **Sun & Moon Conjunction Finder** – special search for combinations that always include the Sun and Moon plus any number of additional planets.
+- **D1 (Lagna) Birth Chart** – enter birth details to generate a whole-sign chart with planetary degrees, nakshatras and house distribution. The tool tries to detect the correct time zone from the location but lets you override it.
+- **Transit Explorer** – view planetary sign changes for any year with an optional planet filter and month range.
+- **Colorful CLI** – progress bars, tables and panels are rendered with the Rich library for easy reading.
 
 ## Requirements
-- Python 3.8+
+- Python 3.8 or later
 - Packages: `rich`, `skyfield`, `swisseph`, `geopy`, `pytz`, `timezonefinder`
-- Swiss Ephemeris `.se1` files and `de440.bsp` ephemeris file in the script directory
+- Swiss Ephemeris `.se1` files and the `de440.bsp` planetary ephemeris in this directory
 
 ## Usage
-1. Install dependencies:
-   ```cmd
+1. Install the dependencies:
+   ```bash
    pip install rich skyfield swisseph geopy pytz timezonefinder
    ```
-2. Run the program:
-   ```cmd
+2. Run the menu-driven program:
+   ```bash
    python DracoVed_v1.py
    ```
-3. Follow the menu prompts to use conjunction search or generate a D1 chart.
+3. Choose an option from the menu to search for conjunctions, check transits or generate a chart.
 
-## File Structure
-- `DracoVed_v1.py` — Main entry point (menu/CLI)
-- `features.py` — Main features (conjunctions, D1 chart)
-- `astro_utils.py` — Astronomy and calculation helpers
-- `display_utils.py` — Rich output helpers
-- `config.py` — Configuration and constants
+## Project Layout
+- `DracoVed_v1.py` – main entry point providing the interactive menu
+- `features.py` – implementations for conjunction searches, transits and chart generation
+- `astro_utils.py` – astronomical helper functions
+- `display_utils.py` – utilities for Rich output
+- `config.py` – global constants and settings
 
 ## Notes
-- Make sure the required ephemeris files are present in the same directory as the scripts.
-- For best results, use a terminal that supports Unicode and ANSI colors.
+- Ensure the required ephemeris files are present alongside the scripts.
+- Unicode and ANSI-color capable terminals provide the best display.
 
 ---
 Created by Mahir, 2025.
