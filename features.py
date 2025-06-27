@@ -5,6 +5,7 @@ from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, Ti
 from rich.panel import Panel
 from rich.text import Text
 from geopy.geocoders import Nominatim
+import config
 from config import PLANET_SKYFIELD_NAMES, ZODIAC_SIGNS_SIDEREAL, ALL_PLANETS, AYANAMSA_SWISSEPH, NAKSHATRAS, EPHEMERIS_PATH_SWISSEPH
 from display_utils import console, print_rich_table
 from astro_utils import *
@@ -14,9 +15,12 @@ from rich.table import Table
 # The following functions require eph, earth, ts to be passed in from main
 
 def find_conjunctions(start_date_dt, end_date_dt, min_planets, eph, earth, ts):
+    sidereal_mode = (config.MODE == 'sidereal')
     ayanamsa_name_str = "True Chitrapaksha" if AYANAMSA_SWISSEPH == swe.SIDM_TRUE_CITRA else \
                         "Lahiri" if AYANAMSA_SWISSEPH == swe.SIDM_LAHIRI else \
                         f"Custom ({AYANAMSA_SWISSEPH})"
+    if not sidereal_mode:
+        ayanamsa_name_str = "N/A (Tropical)"
     total_days = (end_date_dt - start_date_dt).days + 1
     config_table = [
         ["Time Range", f"{start_date_dt.strftime('%Y-%m-%d')} to {end_date_dt.strftime('%Y-%m-%d')}`"],
@@ -25,7 +29,8 @@ def find_conjunctions(start_date_dt, end_date_dt, min_planets, eph, earth, ts):
         ["SE1 Path", EPHEMERIS_PATH_SWISSEPH],  # Use config value instead of swe.get_ephe_path()
         ["Min Planets", str(min_planets)]
     ]
-    console.print(Panel.fit("[bold magenta]Vedic Conjunction Search Parameters[/bold magenta]", style="cyan"))
+    title_txt = "Vedic Conjunction Search Parameters" if sidereal_mode else "Tropical Conjunction Search Parameters"
+    console.print(Panel.fit(f"[bold magenta]{title_txt}[/bold magenta]", style="cyan"))
     print_rich_table(["Parameter", "Value"], config_table)
     current_date = start_date_dt
     found_conjunctions = {}
@@ -33,8 +38,8 @@ def find_conjunctions(start_date_dt, end_date_dt, min_planets, eph, earth, ts):
     pyswisseph_functional_for_rahu = True
     t_sky_initial_check = get_skyfield_time(current_date.year, current_date.month, current_date.day)
     jd_ut_initial_check = get_julian_day_from_skyfield_time(t_sky_initial_check)
-    initial_ayanamsa = get_ayanamsa_value(jd_ut_initial_check)
-    if initial_ayanamsa is None:
+    initial_ayanamsa = get_ayanamsa_value(jd_ut_initial_check) if sidereal_mode else 0
+    if sidereal_mode and initial_ayanamsa is None:
         console.print("[bold red]CRITICAL PYSWISSEPH ERROR: Cannot calculate Ayanamsha.")
         console.print(f"Please ensure Swiss Ephemeris .se1 files are in the script directory: {swe.get_ephe_path()}")
         console.print("Aborting search as sidereal calculations are not possible.")
@@ -58,44 +63,44 @@ def find_conjunctions(start_date_dt, end_date_dt, min_planets, eph, earth, ts):
         while current_date <= end_date_dt:
             t_sky = get_skyfield_time(current_date.year, current_date.month, current_date.day)
             jd_ut = get_julian_day_from_skyfield_time(t_sky)
-            ayanamsa = None
-            if pyswisseph_functional_for_ayanamsa:
+            ayanamsa = 0
+            if sidereal_mode and pyswisseph_functional_for_ayanamsa:
                 ayanamsa = get_ayanamsa_value(jd_ut)
                 if ayanamsa is None:
                     pyswisseph_functional_for_ayanamsa = False
             planet_positions_in_signs = defaultdict(list)
             planet_degrees = {}
-            if pyswisseph_functional_for_ayanamsa:
+            if (not sidereal_mode) or pyswisseph_functional_for_ayanamsa:
                 for display_name, skyfield_name in PLANET_SKYFIELD_NAMES.items():
                     tropical_lon = get_tropical_ecliptic_longitude_skyfield(t_sky, skyfield_name, eph, earth)
                     if tropical_lon is not None:
-                        sidereal_lon = get_sidereal_longitude(tropical_lon, ayanamsa)
-                        if sidereal_lon is not None:
-                            sign_index = get_zodiac_sign_index(sidereal_lon)
+                        lon = get_sidereal_longitude(tropical_lon, ayanamsa) if sidereal_mode else tropical_lon
+                        if lon is not None:
+                            sign_index = get_zodiac_sign_index(lon)
                             if sign_index is not None:
                                 planet_positions_in_signs[sign_index].append(display_name)
-                                planet_degrees[display_name] = sidereal_lon
+                                planet_degrees[display_name] = lon
                 # Rahu
                 if pyswisseph_functional_for_rahu:
                     rahu_tropical_lon = get_rahu_tropical_longitude_swisseph(jd_ut)
                     if rahu_tropical_lon is not None:
-                        rahu_sidereal_lon = get_sidereal_longitude(rahu_tropical_lon, ayanamsa)
-                        if rahu_sidereal_lon is not None:
-                            rahu_sign_index = get_zodiac_sign_index(rahu_sidereal_lon)
+                        rahu_lon = get_sidereal_longitude(rahu_tropical_lon, ayanamsa) if sidereal_mode else rahu_tropical_lon
+                        if rahu_lon is not None:
+                            rahu_sign_index = get_zodiac_sign_index(rahu_lon)
                             if rahu_sign_index is not None:
                                 planet_positions_in_signs[rahu_sign_index].append("Rahu")
-                                planet_degrees["Rahu"] = rahu_sidereal_lon
+                                planet_degrees["Rahu"] = rahu_lon
                 # Ketu
                 if pyswisseph_functional_for_rahu:
                     rahu_tropical_lon = get_rahu_tropical_longitude_swisseph(jd_ut)
                     if rahu_tropical_lon is not None:
                         ketu_tropical_lon = (rahu_tropical_lon + 180.0) % 360.0
-                        ketu_sidereal_lon = get_sidereal_longitude(ketu_tropical_lon, ayanamsa)
-                        if ketu_sidereal_lon is not None:
-                            ketu_sign_index = get_zodiac_sign_index(ketu_sidereal_lon)
+                        ketu_lon = get_sidereal_longitude(ketu_tropical_lon, ayanamsa) if sidereal_mode else ketu_tropical_lon
+                        if ketu_lon is not None:
+                            ketu_sign_index = get_zodiac_sign_index(ketu_lon)
                             if ketu_sign_index is not None:
                                 planet_positions_in_signs[ketu_sign_index].append("Ketu")
-                                planet_degrees["Ketu"] = ketu_sidereal_lon
+                                planet_degrees["Ketu"] = ketu_lon
             for sign_index, planets_in_sign in planet_positions_in_signs.items():
                 if len(planets_in_sign) >= min_planets:
                     sign_name = ZODIAC_SIGNS_SIDEREAL[sign_index]
@@ -118,7 +123,7 @@ def find_conjunctions(start_date_dt, end_date_dt, min_planets, eph, earth, ts):
                             planets_str
                         ])
                     found_conjunctions[conjunction_key] = current_date
-            if not pyswisseph_functional_for_ayanamsa:
+            if sidereal_mode and not pyswisseph_functional_for_ayanamsa:
                 console.print("[bold red]Halting search as Ayanamsha calculation is no longer functional (pyswisseph issue).")
                 return
             current_date += timedelta(days=1)
@@ -131,7 +136,38 @@ def find_conjunctions(start_date_dt, end_date_dt, min_planets, eph, earth, ts):
     console.print("[bold green]Search complete.[/bold green]")
 
 
+def list_new_full_moons(start_date_dt, end_date_dt, eph, earth, ts):
+    """List all New Moon and Full Moon events between two dates."""
+    from skyfield import almanac
+    sidereal_mode = (config.MODE == 'sidereal')
+    t0 = ts.utc(start_date_dt.year, start_date_dt.month, start_date_dt.day)
+    t1 = ts.utc(end_date_dt.year, end_date_dt.month, end_date_dt.day, 23, 59, 59)
+    times, phases = almanac.find_discrete(t0, t1, almanac.moon_phases(eph))
+    rows = []
+    for t, phase in zip(times, phases):
+        if phase not in (0, 2):
+            continue
+        jd_ut = t.ut1
+        ayanamsa = get_ayanamsa_value(jd_ut) if sidereal_mode else 0
+        moon_lon_trop = get_tropical_ecliptic_longitude_skyfield(t, 'moon', eph, earth)
+        sun_lon_trop = get_tropical_ecliptic_longitude_skyfield(t, 'sun', eph, earth)
+        if moon_lon_trop is None or sun_lon_trop is None or (sidereal_mode and ayanamsa is None):
+            continue
+        moon_lon = get_sidereal_longitude(moon_lon_trop, ayanamsa) if sidereal_mode else moon_lon_trop
+        sun_lon = get_sidereal_longitude(sun_lon_trop, ayanamsa) if sidereal_mode else sun_lon_trop
+        moon_sign = ZODIAC_SIGNS_SIDEREAL[get_zodiac_sign_index(moon_lon)]
+        sun_sign = ZODIAC_SIGNS_SIDEREAL[get_zodiac_sign_index(sun_lon)]
+        event_name = "New Moon" if phase == 0 else "Full Moon"
+        rows.append([t.utc_strftime('%Y-%m-%d %H:%M UTC'), event_name, moon_sign, sun_sign])
+    if rows:
+        console.print(Panel.fit("[bold magenta]Lunar Phases[/bold magenta]", style="cyan"))
+        print_rich_table(["Date/Time", "Event", "Moon Sign", "Sun Sign"], rows)
+    else:
+        console.print("[yellow]No lunar phase events found in range.")
+
+
 def find_pair_conjunctions(start_date_dt, end_date_dt, planet1, planet2, eph, earth, ts):
+    sidereal_mode = (config.MODE == 'sidereal')
     console.print(Panel.fit(f"[bold cyan]Searching for conjunctions between {planet1} and {planet2} from {start_date_dt.year} to {end_date_dt.year}[/bold cyan]", style="cyan"))
     total_days = (end_date_dt - start_date_dt).days + 1
     conjunction_dates = []
@@ -148,7 +184,7 @@ def find_pair_conjunctions(start_date_dt, end_date_dt, planet1, planet2, eph, ea
         while current_date <= end_date_dt:
             t_sky = get_skyfield_time(current_date.year, current_date.month, current_date.day)
             jd_ut = get_julian_day_from_skyfield_time(t_sky)
-            ayanamsa = get_ayanamsa_value(jd_ut)
+            ayanamsa = get_ayanamsa_value(jd_ut) if sidereal_mode else 0
             positions = {}
             nakshatras = {}
             for p in [planet1, planet2]:
@@ -161,10 +197,10 @@ def find_pair_conjunctions(start_date_dt, end_date_dt, planet1, planet2, eph, ea
                     tropical_lon = (rahu_lon + 180.0) % 360.0 if rahu_lon is not None else None
                 else:
                     tropical_lon = None
-                if tropical_lon is not None and ayanamsa is not None:
-                    sidereal = get_sidereal_longitude(tropical_lon, ayanamsa)
-                    positions[p] = sidereal
-                    nakshatras[p] = get_nakshatra_and_pada(sidereal)
+                if tropical_lon is not None and (not sidereal_mode or ayanamsa is not None):
+                    lon = get_sidereal_longitude(tropical_lon, ayanamsa) if sidereal_mode else tropical_lon
+                    positions[p] = lon
+                    nakshatras[p] = get_nakshatra_and_pada(lon)
                 else:
                     positions[p] = None
                     nakshatras[p] = ("N/A", "N/A")
@@ -215,6 +251,7 @@ def get_location_coordinates():
 
 
 def print_d1_birth_chart(eph, earth, ts):
+    sidereal_mode = (config.MODE == 'sidereal')
     console.print("[bold yellow]Enter birth details for D1 chart:[/bold yellow]")
     name = input("Name (optional): ").strip()
     while True:
@@ -277,17 +314,17 @@ def print_d1_birth_chart(eph, earth, ts):
     console.print(f"Birth Time (UTC):   {dt_utc.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     t_sky = ts.from_datetime(dt_utc)
     jd_ut = get_julian_day_from_skyfield_time(t_sky)
-    ayanamsa = get_ayanamsa_value(jd_ut)
-    if ayanamsa is None:
+    ayanamsa = get_ayanamsa_value(jd_ut) if sidereal_mode else 0
+    if sidereal_mode and ayanamsa is None:
         console.print("[bold red]Error: Unable to compute Ayanamsa. Chart cannot be generated.[/bold red]")
         return
     cusps, ascmc = swe.houses(jd_ut, lat, lon, b'A')
     asc_long_tropical = ascmc[0]
-    asc_sid_long = get_sidereal_longitude(asc_long_tropical, ayanamsa)
-    asc_sign_index = get_zodiac_sign_index(asc_sid_long)
+    asc_long = get_sidereal_longitude(asc_long_tropical, ayanamsa) if sidereal_mode else asc_long_tropical
+    asc_sign_index = get_zodiac_sign_index(asc_long)
     asc_sign = ZODIAC_SIGNS_SIDEREAL[asc_sign_index] if asc_sign_index is not None else "N/A"
-    asc_deg_in_sign = format_degree_in_sign(asc_sid_long)
-    asc_nak, asc_pada = get_nakshatra_and_pada(asc_sid_long)
+    asc_deg_in_sign = format_degree_in_sign(asc_long)
+    asc_nak, asc_pada = get_nakshatra_and_pada(asc_long)
     planet_rows = []
     planet_positions = {}
     for planet in ALL_PLANETS:
@@ -303,12 +340,12 @@ def print_d1_birth_chart(eph, earth, ts):
             if tropical_lon is None:
                 console.print(f"[red]Warning: Could not calculate position for {planet}[/red]")
                 continue
-            sidereal_lon = get_sidereal_longitude(tropical_lon, ayanamsa)
-            sign_index = get_zodiac_sign_index(sidereal_lon)
+            lon = get_sidereal_longitude(tropical_lon, ayanamsa) if sidereal_mode else tropical_lon
+            sign_index = get_zodiac_sign_index(lon)
             sign_name = ZODIAC_SIGNS_SIDEREAL[sign_index] if sign_index is not None else "N/A"
-            deg_in_sign = format_degree_in_sign(sidereal_lon)
-            nak, pada = get_nakshatra_and_pada(sidereal_lon)
-            planet_positions[planet] = sidereal_lon
+            deg_in_sign = format_degree_in_sign(lon)
+            nak, pada = get_nakshatra_and_pada(lon)
+            planet_positions[planet] = lon
             planet_rows.append([
                 f"[bold yellow]{planet}[/bold yellow]",
                 f"[cyan]{deg_in_sign}°[/cyan]",
@@ -334,7 +371,10 @@ def print_d1_birth_chart(eph, earth, ts):
     chart_table.add_column("Planet", style="bold yellow"); chart_table.add_column("Deg in Sign", style="cyan"); chart_table.add_column("Sign", style="bold cyan"); chart_table.add_column("Nakshatra-Pada")
     for row in planet_rows: chart_table.add_row(*row)
     console.print(Panel.fit(f"[bold green]Ascendant: {asc_sign} {asc_deg_in_sign}° ({asc_nak}-{asc_pada})[/bold green]", style="green"))
-    console.print(Panel.fit(f"[bold blue]Ayanamsha (True Chitrapaksha): {ayanamsa:.4f}°[/bold blue]", style="blue"))
+    if sidereal_mode:
+        console.print(Panel.fit(f"[bold blue]Ayanamsha (True Chitrapaksha): {ayanamsa:.4f}°[/bold blue]", style="blue"))
+    else:
+        console.print(Panel.fit("[bold blue]Tropical Calculation[/bold blue]", style="blue"))
     console.print(chart_table)
     house_table = Table(title="[bold magenta]Planets in Houses (Whole Sign System)[/bold magenta]", show_lines=True)
     house_table.add_column("House", style="bold yellow"); house_table.add_column("Sign", style="bold cyan"); house_table.add_column("Planets")
@@ -347,6 +387,7 @@ def print_d1_birth_chart(eph, earth, ts):
 
 
 def show_transits(eph, earth, ts):
+    sidereal_mode = (config.MODE == 'sidereal')
     console.print("[bold yellow]Show planetary transits[/bold yellow]")
     while True:
         try:
@@ -406,7 +447,7 @@ def show_transits(eph, earth, ts):
                     except Exception:
                         continue
                     jd_ut = get_julian_day_from_skyfield_time(t_sky)
-                    ayanamsa = get_ayanamsa_value(jd_ut)
+                    ayanamsa = get_ayanamsa_value(jd_ut) if sidereal_mode else 0
                     if planet in PLANET_SKYFIELD_NAMES:
                         tropical_lon = get_tropical_ecliptic_longitude_skyfield(t_sky, PLANET_SKYFIELD_NAMES[planet], eph, earth)
                     elif planet == "Rahu":
@@ -416,11 +457,11 @@ def show_transits(eph, earth, ts):
                         tropical_lon = (rahu_lon + 180.0) % 360.0 if rahu_lon is not None else None
                     else:
                         tropical_lon = None
-                    if tropical_lon is None or ayanamsa is None:
+                    if tropical_lon is None or (sidereal_mode and ayanamsa is None):
                         progress.update(task, advance=1)
                         continue
-                    sidereal_lon = get_sidereal_longitude(tropical_lon, ayanamsa)
-                    sign_index = get_zodiac_sign_index(sidereal_lon)
+                    lon = get_sidereal_longitude(tropical_lon, ayanamsa) if sidereal_mode else tropical_lon
+                    sign_index = get_zodiac_sign_index(lon)
                     if sign_index is None:
                         progress.update(task, advance=1)
                         continue
@@ -446,9 +487,12 @@ def show_transits(eph, earth, ts):
     if not any_events:
         console.print("[yellow]No transits found for the selected period.")
 def find_conjunctions_with_sun_moon(start_date_dt, end_date_dt, min_planets, eph, earth, ts):
+    sidereal_mode = (config.MODE == 'sidereal')
     ayanamsa_name_str = "True Chitrapaksha" if AYANAMSA_SWISSEPH == swe.SIDM_TRUE_CITRA else \
                         "Lahiri" if AYANAMSA_SWISSEPH == swe.SIDM_LAHIRI else \
                         f"Custom ({AYANAMSA_SWISSEPH})"
+    if not sidereal_mode:
+        ayanamsa_name_str = "N/A (Tropical)"
     total_days = (end_date_dt - start_date_dt).days + 1
     config_table = [
         ["Time Range", f"{start_date_dt.strftime('%Y-%m-%d')} to {end_date_dt.strftime('%Y-%m-%d')}`"],
@@ -457,7 +501,8 @@ def find_conjunctions_with_sun_moon(start_date_dt, end_date_dt, min_planets, eph
         ["SE1 Path", EPHEMERIS_PATH_SWISSEPH],
         ["Min Planets (with Sun+Moon)", str(min_planets)]
     ]
-    console.print(Panel.fit("[bold magenta]Vedic Conjunctions: Sun+Moon + N Planets[/bold magenta]", style="cyan"))
+    title_txt = "Vedic Conjunctions: Sun+Moon + N Planets" if sidereal_mode else "Tropical Sun+Moon + N Planets"
+    console.print(Panel.fit(f"[bold magenta]{title_txt}[/bold magenta]", style="cyan"))
     print_rich_table(["Parameter", "Value"], config_table)
     current_date = start_date_dt
     found_conjunctions = {}
@@ -465,8 +510,8 @@ def find_conjunctions_with_sun_moon(start_date_dt, end_date_dt, min_planets, eph
     pyswisseph_functional_for_rahu = True
     t_sky_initial_check = get_skyfield_time(current_date.year, current_date.month, current_date.day)
     jd_ut_initial_check = get_julian_day_from_skyfield_time(t_sky_initial_check)
-    initial_ayanamsa = get_ayanamsa_value(jd_ut_initial_check)
-    if initial_ayanamsa is None:
+    initial_ayanamsa = get_ayanamsa_value(jd_ut_initial_check) if sidereal_mode else 0
+    if sidereal_mode and initial_ayanamsa is None:
         console.print("[bold red]CRITICAL PYSWISSEPH ERROR: Cannot calculate Ayanamsha.")
         console.print(f"Please ensure Swiss Ephemeris .se1 files are in the script directory: {EPHEMERIS_PATH_SWISSEPH}")
         console.print("Aborting search as sidereal calculations are not possible.")
@@ -490,44 +535,44 @@ def find_conjunctions_with_sun_moon(start_date_dt, end_date_dt, min_planets, eph
         while current_date <= end_date_dt:
             t_sky = get_skyfield_time(current_date.year, current_date.month, current_date.day)
             jd_ut = get_julian_day_from_skyfield_time(t_sky)
-            ayanamsa = None
-            if pyswisseph_functional_for_ayanamsa:
+            ayanamsa = 0
+            if sidereal_mode and pyswisseph_functional_for_ayanamsa:
                 ayanamsa = get_ayanamsa_value(jd_ut)
                 if ayanamsa is None:
                     pyswisseph_functional_for_ayanamsa = False
             planet_positions_in_signs = defaultdict(list)
             planet_degrees = {}
-            if pyswisseph_functional_for_ayanamsa:
+            if (not sidereal_mode) or pyswisseph_functional_for_ayanamsa:
                 for display_name, skyfield_name in PLANET_SKYFIELD_NAMES.items():
                     tropical_lon = get_tropical_ecliptic_longitude_skyfield(t_sky, skyfield_name, eph, earth)
                     if tropical_lon is not None:
-                        sidereal_lon = get_sidereal_longitude(tropical_lon, ayanamsa)
-                        if sidereal_lon is not None:
-                            sign_index = get_zodiac_sign_index(sidereal_lon)
+                        lon = get_sidereal_longitude(tropical_lon, ayanamsa) if sidereal_mode else tropical_lon
+                        if lon is not None:
+                            sign_index = get_zodiac_sign_index(lon)
                             if sign_index is not None:
                                 planet_positions_in_signs[sign_index].append(display_name)
-                                planet_degrees[display_name] = sidereal_lon
+                                planet_degrees[display_name] = lon
                 # Rahu
                 if pyswisseph_functional_for_rahu:
                     rahu_tropical_lon = get_rahu_tropical_longitude_swisseph(jd_ut)
                     if rahu_tropical_lon is not None:
-                        rahu_sidereal_lon = get_sidereal_longitude(rahu_tropical_lon, ayanamsa)
-                        if rahu_sidereal_lon is not None:
-                            rahu_sign_index = get_zodiac_sign_index(rahu_sidereal_lon)
+                        rahu_lon = get_sidereal_longitude(rahu_tropical_lon, ayanamsa) if sidereal_mode else rahu_tropical_lon
+                        if rahu_lon is not None:
+                            rahu_sign_index = get_zodiac_sign_index(rahu_lon)
                             if rahu_sign_index is not None:
                                 planet_positions_in_signs[rahu_sign_index].append("Rahu")
-                                planet_degrees["Rahu"] = rahu_sidereal_lon
+                                planet_degrees["Rahu"] = rahu_lon
                 # Ketu
                 if pyswisseph_functional_for_rahu:
                     rahu_tropical_lon = get_rahu_tropical_longitude_swisseph(jd_ut)
                     if rahu_tropical_lon is not None:
                         ketu_tropical_lon = (rahu_tropical_lon + 180.0) % 360.0
-                        ketu_sidereal_lon = get_sidereal_longitude(ketu_tropical_lon, ayanamsa)
-                        if ketu_sidereal_lon is not None:
-                            ketu_sign_index = get_zodiac_sign_index(ketu_sidereal_lon)
+                        ketu_lon = get_sidereal_longitude(ketu_tropical_lon, ayanamsa) if sidereal_mode else ketu_tropical_lon
+                        if ketu_lon is not None:
+                            ketu_sign_index = get_zodiac_sign_index(ketu_lon)
                             if ketu_sign_index is not None:
                                 planet_positions_in_signs[ketu_sign_index].append("Ketu")
-                                planet_degrees["Ketu"] = ketu_sidereal_lon
+                                planet_degrees["Ketu"] = ketu_lon
             for sign_index, planets_in_sign in planet_positions_in_signs.items():
                 # Only consider conjunctions that include both Sun and Moon
                 if "Sun" in planets_in_sign and "Moon" in planets_in_sign and len(planets_in_sign) >= min_planets:
@@ -551,7 +596,7 @@ def find_conjunctions_with_sun_moon(start_date_dt, end_date_dt, min_planets, eph
                             planets_str
                         ])
                     found_conjunctions[conjunction_key] = current_date
-            if not pyswisseph_functional_for_ayanamsa:
+            if sidereal_mode and not pyswisseph_functional_for_ayanamsa:
                 console.print("[bold red]Halting search as Ayanamsha calculation is no longer functional (pyswisseph issue).")
                 return
             current_date += timedelta(days=1)
