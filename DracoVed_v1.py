@@ -15,7 +15,6 @@ eph = load(EPHEMERIS_SKYFIELD)
 earth = eph['earth']
 # --- pyswisseph Setup ---
 swe.set_ephe_path(EPHEMERIS_PATH_SWISSEPH)
-swe.set_sid_mode(AYANAMSA_SWISSEPH)
 
 if __name__ == "__main__":
     title = Text("DracoVed", style="bold cyan")
@@ -26,7 +25,7 @@ if __name__ == "__main__":
     mode_in = input("Enter 1 or 2 [1]: ").strip()
     if mode_in == "2":
         config.MODE = 'tropical'
-        swe.set_sid_mode(swe.SIDM_NONE)
+        swe.set_sid_mode(0)  # reset to tropical calculations
         console.print("[green]Tropical mode selected.[/green]")
     else:
         config.MODE = 'sidereal'
