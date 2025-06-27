@@ -7,6 +7,9 @@ EPHEMERIS_SKYFIELD = 'de440.bsp'
 SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 EPHEMERIS_PATH_SWISSEPH = SCRIPT_DIRECTORY # .se1 files MUST be here
 
+# Calculation mode: 'sidereal' for Vedic, 'tropical' for Western
+MODE = 'sidereal'
+
 PLANET_SKYFIELD_NAMES = {
     "Sun": 'sun',
     "Moon": 'moon',

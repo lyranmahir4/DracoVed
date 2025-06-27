@@ -9,6 +9,8 @@ DracoVed is a command line toolkit for Vedic astrology research. It uses modern 
 - **D1 (Lagna) Birth Chart** – enter birth details to generate a whole-sign chart with planetary degrees, nakshatras and house distribution. The tool tries to detect the correct time zone from the location but lets you override it.
 - **Transit Explorer** – view planetary sign changes for any year with an optional planet filter and month range.
 - **Colorful CLI** – progress bars, tables and panels are rendered with the Rich library for easy reading.
+- **Vedic/Tropical Modes** – select sidereal or tropical calculations when starting the program.
+- **New & Full Moon Finder** – list exact times and signs of each lunation within a chosen date range.
 
 ## Requirements
 - Python 3.8 or later

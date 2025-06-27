@@ -1,4 +1,5 @@
 # DracoVed main script (entry point)
+import config
 from config import *
 from astro_utils import *
 from display_utils import console, print_rich_table
@@ -17,8 +18,20 @@ swe.set_ephe_path(EPHEMERIS_PATH_SWISSEPH)
 swe.set_sid_mode(AYANAMSA_SWISSEPH)
 
 if __name__ == "__main__":
-    title = Text("Vedic Conjunction Finder", style="bold cyan")
+    title = Text("DracoVed", style="bold cyan")
     console.print("\n" + "." * 20, title, "." * 20)
+    console.print("[bold yellow]Select calculation mode:[/bold yellow]")
+    console.print("  1. Vedic (sidereal)")
+    console.print("  2. Tropical (western)")
+    mode_in = input("Enter 1 or 2 [1]: ").strip()
+    if mode_in == "2":
+        config.MODE = 'tropical'
+        swe.set_sid_mode(swe.SIDM_NONE)
+        console.print("[green]Tropical mode selected.[/green]")
+    else:
+        config.MODE = 'sidereal'
+        swe.set_sid_mode(AYANAMSA_SWISSEPH)
+        console.print("[green]Vedic (sidereal) mode selected.[/green]")
     while True:
         console.print("\n[bold yellow]Please select an option:[/bold yellow]")
         console.print("  1. Find all dates with N-planet conjunctions")
@@ -26,8 +39,9 @@ if __name__ == "__main__":
         console.print("  3. Show D1 birth chart details")
         console.print("  4. Show planetary transits")
         console.print("  5. Find conjunctions with Sun+Moon + N planets")
+        console.print("  6. List New and Full Moons")
         console.print("  0. Exit")
-        choice = input("Enter your choice (0/1/2/3/4/5): ").strip()
+        choice = input("Enter your choice (0/1/2/3/4/5/6): ").strip()
         if choice == "0":
             console.print("[bold green]Goodbye![/bold green]")
             break
@@ -110,5 +124,20 @@ if __name__ == "__main__":
             end_dt_obj = datetime(end_year, 12, 31)
             from features import find_conjunctions_with_sun_moon
             find_conjunctions_with_sun_moon(start_dt_obj, end_dt_obj, n_planets, eph, earth, ts)
+        elif choice == "6":
+            while True:
+                try:
+                    start_str = input("Enter start date (YYYY-MM-DD): ").strip()
+                    end_str = input("Enter end date   (YYYY-MM-DD): ").strip()
+                    start_dt_obj = datetime.strptime(start_str, "%Y-%m-%d")
+                    end_dt_obj = datetime.strptime(end_str, "%Y-%m-%d")
+                    if start_dt_obj <= end_dt_obj:
+                        break
+                    else:
+                        console.print("[red]Start date must be before end date.[/red]")
+                except Exception:
+                    console.print("[red]Invalid date format. Please use YYYY-MM-DD.[/red]")
+            from features import list_new_full_moons
+            list_new_full_moons(start_dt_obj, end_dt_obj, eph, earth, ts)
         else:
-            console.print("[red]Invalid choice. Please enter 0, 1, 2, 3, 4, or 5.[/red]")
+            console.print("[red]Invalid choice. Please enter 0, 1, 2, 3, 4, 5, or 6.[/red]")
